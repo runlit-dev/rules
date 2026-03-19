@@ -1,0 +1,9 @@
+# buf cache
+.buf/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
