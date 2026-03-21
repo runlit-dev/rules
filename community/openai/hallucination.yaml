@@ -1,0 +1,113 @@
+# runlit community rules — OpenAI SDK hallucinations
+# License: Apache 2.0
+# Verified against openai-python changelog and openai-node changelog (March 2026).
+
+rules:
+  # ── Python ──────────────────────────────────────────────────────────────────
+
+  - id: runlit-hallucination/openai-python/edit-endpoint-removed
+    languages: [python]
+    severity: ERROR
+    message: >
+      `openai.Edit` (and `client.edits.create()`) was deprecated 2023-07-06 and removed 2024-01-04.
+      This endpoint no longer exists — requests will 404.
+    patterns:
+      - pattern: openai.Edit.create(...)
+      - pattern: $CLIENT.edits.create(...)
+    metadata:
+      category: hallucination
+      library: openai-python
+      removed_date: "2024-01-04"
+      cwe: null
+    fix: Use `client.chat.completions.create()` with a system prompt describing the editing task.
+
+  - id: runlit-hallucination/openai-python/legacy-completion
+    languages: [python]
+    severity: WARNING
+    message: >
+      `openai.Completion.create()` (legacy completions) was deprecated 2023-07-06.
+      It will eventually be removed. Prefer Chat Completions.
+    pattern: openai.Completion.create(...)
+    metadata:
+      category: deprecated
+      library: openai-python
+      verified_against: ">=1.0.0"
+    fix: Use `client.chat.completions.create(model="gpt-4o", messages=[...])`.
+
+  - id: runlit-hallucination/openai-python/v0-api-key-pattern
+    languages: [python]
+    severity: WARNING
+    message: >
+      `openai.api_key = ...` is the openai v0.x pattern. openai v1.0+ uses a client instance.
+      This will raise `AttributeError` if openai>=1.0.0 is installed.
+    pattern: openai.api_key = $KEY
+    metadata:
+      category: deprecated
+      library: openai-python
+      breaking_version: "1.0.0"
+    fix: Use `from openai import OpenAI; client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])`.
+
+  - id: runlit-hallucination/openai-python/chatcompletion-v0
+    languages: [python]
+    severity: WARNING
+    message: >
+      `openai.ChatCompletion.create()` is the openai v0.x API.
+      In openai>=1.0.0 this raises `AttributeError`.
+    pattern: openai.ChatCompletion.create(...)
+    metadata:
+      category: deprecated
+      library: openai-python
+      breaking_version: "1.0.0"
+    fix: Use `client.chat.completions.create(model=..., messages=...)`.
+
+  - id: runlit-hallucination/openai-python/stream-hallucinated-method
+    languages: [python]
+    severity: ERROR
+    message: >
+      `.stream_to_file()` does not exist on OpenAI responses. Hallucinated streaming method.
+    pattern: $RESPONSE.stream_to_file(...)
+    metadata:
+      category: hallucination
+      library: openai-python
+      verified_against: ">=1.0.0"
+
+  # ── TypeScript / Node.js ────────────────────────────────────────────────────
+
+  - id: runlit-hallucination/openai-node/v3-configuration-import
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `Configuration` and `OpenAIApi` were removed in openai-node v4.0 (November 2023).
+      Imports like `import { Configuration, OpenAIApi } from 'openai'` will fail at runtime.
+    patterns:
+      - pattern: import { Configuration, OpenAIApi } from 'openai'
+      - pattern: import { Configuration } from 'openai'
+    metadata:
+      category: hallucination
+      library: openai-node
+      removed_version: "4.0.0"
+    fix: Use `import OpenAI from 'openai'; const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });`.
+
+  - id: runlit-hallucination/openai-node/legacy-createcompletion
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >
+      `openai.createCompletion()` is the v3.x API. In openai-node v4+, use `client.completions.create()`.
+    pattern: $OPENAI.createCompletion(...)
+    metadata:
+      category: deprecated
+      library: openai-node
+      breaking_version: "4.0.0"
+    fix: Use `client.chat.completions.create({ model: "gpt-4o", messages: [...] })`.
+
+  - id: runlit-hallucination/openai-node/legacy-createchatcompletion
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >
+      `openai.createChatCompletion()` is the v3.x API. In openai-node v4+, use `client.chat.completions.create()`.
+    pattern: $OPENAI.createChatCompletion(...)
+    metadata:
+      category: deprecated
+      library: openai-node
+      breaking_version: "4.0.0"
+    fix: Use `client.chat.completions.create({ model: "gpt-4o", messages: [...] })`.

@@ -1,0 +1,78 @@
+# runlit community rules — Anthropic SDK hallucinations
+# License: Apache 2.0
+# Verified against anthropic-python and @anthropic-ai/sdk changelogs (March 2026).
+
+rules:
+  # ── Python ──────────────────────────────────────────────────────────────────
+
+  - id: runlit-hallucination/anthropic-python/v0-completion-api
+    languages: [python]
+    severity: ERROR
+    message: >
+      `anthropic.Anthropic().completions.create()` is the v0.x API (pre-2023-12).
+      In anthropic>=0.18.0 (Messages API), use `client.messages.create()` instead.
+    patterns:
+      - pattern: $CLIENT.completions.create(...)
+    metadata:
+      category: deprecated
+      library: anthropic-python
+      breaking_version: "0.18.0"
+    fix: >
+      Use `client.messages.create(model="claude-opus-4-6", max_tokens=1024, messages=[{"role": "user", "content": "..."}])`.
+
+  - id: runlit-hallucination/anthropic-python/wrong-model-name
+    languages: [python]
+    severity: WARNING
+    message: >
+      `claude-3-5-sonnet-20241022` is an older model ID. Use `claude-sonnet-4-6` or `claude-opus-4-6`.
+      AI models often hallucinate outdated Claude model IDs.
+    patterns:
+      - pattern: model="claude-3-5-sonnet-20241022"
+      - pattern: model="claude-3-opus-20240229"
+      - pattern: model="claude-3-sonnet-20240229"
+      - pattern: model="claude-2.1"
+      - pattern: model="claude-2.0"
+    metadata:
+      category: deprecated
+      library: anthropic-python
+      verified_against: "March 2026"
+    fix: Use `model="claude-sonnet-4-6"` (current recommended) or `model="claude-opus-4-6"`.
+
+  - id: runlit-hallucination/anthropic-python/hallucinated-stop-reason
+    languages: [python]
+    severity: ERROR
+    message: >
+      `response.stop_reason == "stop_sequence"` — the correct value is `"end_turn"` for normal completion
+      or `"stop_sequence"` only when a custom stop sequence is hit. AI models confuse these.
+      Common hallucination: checking `stop_reason == "complete"` which never occurs.
+    pattern: $RESPONSE.stop_reason == "complete"
+    metadata:
+      category: hallucination
+      library: anthropic-python
+      verified_against: ">=0.18.0"
+    fix: Check `response.stop_reason == "end_turn"` for normal completion.
+
+  # ── TypeScript / Node.js ────────────────────────────────────────────────────
+
+  - id: runlit-hallucination/anthropic-node/v0-completion-api
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `client.complete()` is the Anthropic SDK v0.x API. In @anthropic-ai/sdk>=0.20.0, use `client.messages.create()`.
+    pattern: $CLIENT.complete(...)
+    metadata:
+      category: deprecated
+      library: "@anthropic-ai/sdk"
+      breaking_version: "0.20.0"
+    fix: Use `await client.messages.create({ model: "claude-sonnet-4-6", max_tokens: 1024, messages: [...] })`.
+
+  - id: runlit-hallucination/anthropic-node/wrong-import
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `import Anthropic from '@anthropic-ai/anthropic'` — the package name is `@anthropic-ai/sdk`, not `@anthropic-ai/anthropic`.
+    pattern: from '@anthropic-ai/anthropic'
+    metadata:
+      category: hallucination
+      library: "@anthropic-ai/sdk"
+    fix: Use `import Anthropic from '@anthropic-ai/sdk'`.

@@ -1,0 +1,91 @@
+# runlit community rules — Stripe SDK hallucinations
+# License: Apache 2.0
+# These rules detect API calls invented by AI models that do not exist in current Stripe SDKs.
+# Verified against Stripe Python SDK changelog and Node.js SDK changelog (March 2026).
+
+rules:
+  # ── Python ──────────────────────────────────────────────────────────────────
+
+  - id: runlit-hallucination/stripe-python/attach-async
+    languages: [python]
+    severity: ERROR
+    message: >
+      `stripe.PaymentMethod.attach_async()` does not exist.
+      The Stripe Python SDK has no async variant — `attach()` is synchronous.
+      AI models frequently hallucinate this method.
+    pattern: stripe.PaymentMethod.attach_async(...)
+    metadata:
+      category: hallucination
+      library: stripe-python
+      verified_against: ">=2.0.0"
+      cwe: null
+      references:
+        - https://stripe.com/docs/api/payment_methods/attach
+    fix: Use `stripe.PaymentMethod.attach(payment_method_id, customer=customer_id)`.
+
+  - id: runlit-hallucination/stripe-python/charge-create-deprecated
+    languages: [python]
+    severity: WARNING
+    message: >
+      `stripe.Charge.create()` is deprecated. Use PaymentIntents API instead.
+      Charges API is considered legacy and no longer recommended for new integrations.
+    pattern: stripe.Charge.create(...)
+    metadata:
+      category: deprecated
+      library: stripe-python
+      verified_against: ">=5.0.0"
+    fix: Use `stripe.PaymentIntent.create(amount=..., currency=..., automatic_payment_methods={"enabled": True})`.
+
+  - id: runlit-hallucination/stripe-python/retrieve-with-customer-kwarg
+    languages: [python]
+    severity: WARNING
+    message: >
+      `stripe.PaymentMethod.retrieve()` does not accept a `customer` keyword argument.
+      The API takes only the payment method ID.
+    patterns:
+      - pattern: stripe.PaymentMethod.retrieve(..., customer=..., ...)
+    metadata:
+      category: hallucination
+      library: stripe-python
+      verified_against: ">=5.0.0"
+    fix: Use `stripe.PaymentMethod.retrieve(payment_method_id)`.
+
+  - id: runlit-hallucination/stripe-python/payment-intent-confirm-async
+    languages: [python]
+    severity: ERROR
+    message: >
+      `stripe.PaymentIntent.confirm_async()` does not exist.
+      Hallucinated async variant — use the synchronous `confirm()` method.
+    pattern: stripe.PaymentIntent.confirm_async(...)
+    metadata:
+      category: hallucination
+      library: stripe-python
+      verified_against: ">=5.0.0"
+    fix: Use `stripe.PaymentIntent.confirm(payment_intent_id)`.
+
+  # ── TypeScript / Node.js ────────────────────────────────────────────────────
+
+  - id: runlit-hallucination/stripe-node/attach-async
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `stripe.paymentMethods.attachAsync()` does not exist in the Stripe Node.js SDK.
+      AI models commonly hallucinate this method.
+    pattern: $STRIPE.paymentMethods.attachAsync(...)
+    metadata:
+      category: hallucination
+      library: stripe-node
+      verified_against: ">=12.0.0"
+    fix: Use `stripe.paymentMethods.attach(paymentMethodId, { customer: customerId })`.
+
+  - id: runlit-hallucination/stripe-node/charge-create-deprecated
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >
+      `stripe.charges.create()` is deprecated. Use PaymentIntents API.
+    pattern: $STRIPE.charges.create(...)
+    metadata:
+      category: deprecated
+      library: stripe-node
+      verified_against: ">=10.0.0"
+    fix: Use `stripe.paymentIntents.create({ amount, currency, automatic_payment_methods: { enabled: true } })`.

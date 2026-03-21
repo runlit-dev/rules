@@ -1,0 +1,104 @@
+# runlit community rules — LangChain import path hallucinations
+# License: Apache 2.0
+# LangChain v0.2 broke many import paths in April 2024. AI models still produce v0.1 imports.
+# Verified against LangChain changelog (March 2026).
+
+rules:
+  # ── Python ──────────────────────────────────────────────────────────────────
+
+  - id: runlit-hallucination/langchain/chatopenai-wrong-import
+    languages: [python]
+    severity: ERROR
+    message: >
+      `from langchain.chat_models import ChatOpenAI` raises ImportError on langchain>=0.2.
+      This import path was removed in LangChain v0.2 (April 2024).
+    pattern: from langchain.chat_models import ChatOpenAI
+    metadata:
+      category: hallucination
+      library: langchain
+      breaking_version: "0.2.0"
+    fix: >
+      Use `from langchain_openai import ChatOpenAI` (requires `pip install langchain-openai`).
+
+  - id: runlit-hallucination/langchain/openai-llm-wrong-import
+    languages: [python]
+    severity: ERROR
+    message: >
+      `from langchain.llms import OpenAI` raises ImportError on langchain>=0.2.
+    pattern: from langchain.llms import OpenAI
+    metadata:
+      category: hallucination
+      library: langchain
+      breaking_version: "0.2.0"
+    fix: Use `from langchain_openai import OpenAI`.
+
+  - id: runlit-hallucination/langchain/embeddings-wrong-import
+    languages: [python]
+    severity: ERROR
+    message: >
+      `from langchain.embeddings import OpenAIEmbeddings` raises ImportError on langchain>=0.2.
+    pattern: from langchain.embeddings import OpenAIEmbeddings
+    metadata:
+      category: hallucination
+      library: langchain
+      breaking_version: "0.2.0"
+    fix: Use `from langchain_openai import OpenAIEmbeddings`.
+
+  - id: runlit-hallucination/langchain/schema-wrong-import
+    languages: [python]
+    severity: ERROR
+    message: >
+      `from langchain.schema import HumanMessage` moved in LangChain v0.2.
+      Direct schema imports from `langchain` are unstable.
+    patterns:
+      - pattern: from langchain.schema import HumanMessage
+      - pattern: from langchain.schema import SystemMessage
+      - pattern: from langchain.schema import AIMessage
+    metadata:
+      category: hallucination
+      library: langchain
+      breaking_version: "0.2.0"
+    fix: Use `from langchain_core.messages import HumanMessage, SystemMessage, AIMessage`.
+
+  - id: runlit-hallucination/langchain/vectorstores-wrong-import
+    languages: [python]
+    severity: WARNING
+    message: >
+      `from langchain.vectorstores import FAISS` may raise ImportError on langchain>=0.2.
+      Vector store integrations moved to `langchain-community`.
+    patterns:
+      - pattern: from langchain.vectorstores import FAISS
+      - pattern: from langchain.vectorstores import Chroma
+      - pattern: from langchain.vectorstores import Pinecone
+    metadata:
+      category: deprecated
+      library: langchain
+      breaking_version: "0.2.0"
+    fix: >
+      Use `from langchain_community.vectorstores import FAISS` (requires `pip install langchain-community`).
+
+  - id: runlit-hallucination/langchain/memorybuffer-wrong-import
+    languages: [python]
+    severity: WARNING
+    message: >
+      `from langchain.memory import ConversationBufferMemory` moved in LangChain v0.2.
+    pattern: from langchain.memory import ConversationBufferMemory
+    metadata:
+      category: deprecated
+      library: langchain
+      breaking_version: "0.2.0"
+    fix: Use `from langchain.memory import ConversationBufferMemory` still works in 0.2 but is deprecated — prefer stateless chains with explicit history.
+
+  - id: runlit-hallucination/langchain/deprecated-run-method
+    languages: [python]
+    severity: WARNING
+    message: >
+      `.run()` on LangChain chains is deprecated in v0.2+. Use `.invoke()` instead.
+      `.run()` will be removed in a future version.
+    patterns:
+      - pattern: $CHAIN.run(...)
+    metadata:
+      category: deprecated
+      library: langchain
+      deprecated_version: "0.2.0"
+    fix: Use `$CHAIN.invoke({"input": ...})`.
