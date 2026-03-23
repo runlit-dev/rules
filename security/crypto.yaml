@@ -1,0 +1,242 @@
+# runlit security rules — weak cryptography and disabled TLS verification
+# License: Apache 2.0
+# Detects cryptographic anti-patterns commonly introduced by AI-generated code:
+# broken hash algorithms for passwords, ECB block cipher mode, hardcoded IVs/salts,
+# disabled certificate verification, and CSPRNG violations.
+
+rules:
+  # ── Password hashing ────────────────────────────────────────────────────────
+
+  - id: runlit-security/crypto/md5-password-hash
+    languages: [python]
+    severity: CRITICAL
+    message: >
+      `hashlib.md5(password)` — MD5 is cryptographically broken and must not be used
+      for password hashing. MD5 produces a reversible hash in milliseconds on modern
+      hardware. Use bcrypt, argon2, or scrypt via `passlib` or `bcrypt`.
+    patterns:
+      - pattern: hashlib.md5($PASSWORD)
+      - pattern: hashlib.md5($PASSWORD.encode(...))
+    metadata:
+      category: security
+      cwe: "CWE-916"
+    fix: >
+      from passlib.hash import argon2
+      hashed = argon2.hash(password)
+      argon2.verify(password, hashed)
+
+  - id: runlit-security/crypto/sha1-password-hash
+    languages: [python]
+    severity: CRITICAL
+    message: >
+      `hashlib.sha1(password)` — SHA-1 is cryptographically broken for password storage.
+      Use bcrypt, argon2, or scrypt.
+    patterns:
+      - pattern: hashlib.sha1($PASSWORD)
+      - pattern: hashlib.sha1($PASSWORD.encode(...))
+    metadata:
+      category: security
+      cwe: "CWE-916"
+    fix: >
+      import bcrypt
+      hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+
+  - id: runlit-security/crypto/sha256-password-no-salt
+    languages: [python]
+    severity: HIGH
+    message: >
+      `hashlib.sha256(password)` without a per-user salt is vulnerable to rainbow table attacks.
+      Even SHA-256 is too fast for password storage — use a deliberately slow KDF.
+    pattern: hashlib.sha256($PASSWORD.encode(...))
+    metadata:
+      category: security
+      cwe: "CWE-759"
+    fix: Use `bcrypt.hashpw()`, `argon2.hash()`, or `hashlib.scrypt()` with a random salt.
+
+  # ── ECB mode ─────────────────────────────────────────────────────────────────
+
+  - id: runlit-security/crypto/aes-ecb-mode
+    languages: [python]
+    severity: CRITICAL
+    message: >
+      AES in ECB mode leaks data patterns — identical plaintext blocks produce identical
+      ciphertext blocks, revealing structure in encrypted data (the "ECB penguin" problem).
+      Use AES-GCM for authenticated encryption or AES-CBC with a random IV and HMAC.
+    patterns:
+      - pattern: AES.new($KEY, AES.MODE_ECB)
+      - pattern: AES.new($KEY, 1)
+    metadata:
+      category: security
+      cwe: "CWE-327"
+    fix: >
+      from Crypto.Cipher import AES
+      import os
+      key = os.urandom(32)
+      nonce = os.urandom(16)
+      cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+      ciphertext, tag = cipher.encrypt_and_digest(plaintext)
+
+  - id: runlit-security/crypto/des-cipher
+    languages: [python]
+    severity: CRITICAL
+    message: >
+      DES (and 3DES/Triple-DES) is a broken cipher — 56-bit key length is trivially brute-forceable.
+      DES was officially deprecated by NIST in 2005. Use AES-256-GCM.
+    patterns:
+      - pattern: DES.new(...)
+      - pattern: DES3.new(...)
+      - pattern: from Crypto.Cipher import DES
+      - pattern: from Crypto.Cipher import DES3
+    metadata:
+      category: security
+      cwe: "CWE-327"
+    fix: Use AES-256-GCM (`from Crypto.Cipher import AES; AES.new(key, AES.MODE_GCM)`).
+
+  # ── Hardcoded IV / nonce ─────────────────────────────────────────────────────
+
+  - id: runlit-security/crypto/hardcoded-iv
+    languages: [python]
+    severity: HIGH
+    message: >
+      Hardcoded IV (Initialization Vector) — reusing a static IV with CBC or CTR mode
+      destroys confidentiality. The IV must be randomly generated per encryption operation.
+    patterns:
+      - pattern: AES.new($KEY, AES.MODE_CBC, iv=b"...")
+      - pattern: AES.new($KEY, AES.MODE_CBC, IV=b"...")
+      - pattern: AES.new($KEY, AES.MODE_CTR, nonce=b"...")
+    metadata:
+      category: security
+      cwe: "CWE-330"
+    fix: Use `iv = os.urandom(16)` to generate a fresh random IV for every encryption call.
+
+  # ── CSPRNG violations ────────────────────────────────────────────────────────
+
+  - id: runlit-security/crypto/random-for-token-generation
+    languages: [python]
+    severity: HIGH
+    message: >
+      `random.randint()` / `random.choice()` / `random.random()` uses a PRNG that is
+      not cryptographically secure — predictable given past outputs.
+      Use the `secrets` module for security-sensitive random values.
+    patterns:
+      - pattern: random.randint(0, $N)
+      - pattern: random.choice($SEQ)
+      - pattern: random.random()
+    metadata:
+      category: security
+      cwe: "CWE-338"
+    fix: >
+      import secrets
+      token = secrets.token_hex(32)    # URL-safe 64-char hex token
+      choice = secrets.choice(sequence)  # cryptographically secure choice
+
+  - id: runlit-security/crypto/math-random-for-token
+    languages: [typescript, javascript]
+    severity: HIGH
+    message: >
+      `Math.random()` is not cryptographically secure — do not use it for tokens,
+      nonces, passwords, or session identifiers. Use `crypto.randomBytes()` (Node.js)
+      or `crypto.getRandomValues()` (browser).
+    patterns:
+      - pattern: Math.random()
+    metadata:
+      category: security
+      cwe: "CWE-338"
+    fix: >
+      // Node.js
+      import crypto from "crypto";
+      const token = crypto.randomBytes(32).toString("hex");
+      // Browser
+      const array = new Uint8Array(32);
+      crypto.getRandomValues(array);
+
+  # ── Disabled TLS / certificate verification ──────────────────────────────────
+
+  - id: runlit-security/crypto/requests-verify-false
+    languages: [python]
+    severity: CRITICAL
+    message: >
+      `requests.get(..., verify=False)` disables TLS certificate verification — all
+      HTTPS connections become vulnerable to MITM attacks. Never disable in production.
+    patterns:
+      - pattern: requests.get(..., verify=False, ...)
+      - pattern: requests.post(..., verify=False, ...)
+      - pattern: requests.put(..., verify=False, ...)
+      - pattern: requests.request(..., verify=False, ...)
+      - pattern: requests.Session().get(..., verify=False, ...)
+    metadata:
+      category: security
+      cwe: "CWE-295"
+    fix: Remove `verify=False`. If using a custom CA, set `verify="/path/to/ca-bundle.crt"`.
+
+  - id: runlit-security/crypto/ssl-cert-none
+    languages: [python]
+    severity: CRITICAL
+    message: >
+      `ssl.CERT_NONE` disables certificate verification entirely, allowing MITM attacks.
+    patterns:
+      - pattern: $CTX.verify_mode = ssl.CERT_NONE
+      - pattern: ssl.create_default_context(cert_reqs=ssl.CERT_NONE)
+    metadata:
+      category: security
+      cwe: "CWE-295"
+    fix: Use `ssl.CERT_REQUIRED` (the default). Do not set `check_hostname = False`.
+
+  - id: runlit-security/crypto/node-tls-reject-unauthorized
+    languages: [typescript, javascript]
+    severity: CRITICAL
+    message: >
+      `NODE_TLS_REJECT_UNAUTHORIZED = "0"` disables TLS certificate verification
+      for all HTTPS connections in the Node.js process. This is extremely dangerous.
+    patterns:
+      - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+      - pattern: process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0"
+    metadata:
+      category: security
+      cwe: "CWE-295"
+    fix: Remove this line and fix the underlying certificate issue properly.
+
+  - id: runlit-security/crypto/node-https-reject-unauthorized-false
+    languages: [typescript, javascript]
+    severity: CRITICAL
+    message: >
+      `rejectUnauthorized: false` in HTTPS options disables TLS certificate validation.
+    patterns:
+      - pattern: https.request({ ..., rejectUnauthorized: false, ... })
+      - pattern: https.get({ ..., rejectUnauthorized: false, ... })
+    metadata:
+      category: security
+      cwe: "CWE-295"
+    fix: Remove `rejectUnauthorized: false`. Fix the underlying certificate problem.
+
+  - id: runlit-security/crypto/go-tls-insecure-skip-verify
+    languages: [go]
+    severity: CRITICAL
+    message: >
+      `InsecureSkipVerify: true` in `tls.Config` disables TLS certificate verification.
+      All HTTPS connections become vulnerable to man-in-the-middle attacks.
+    pattern: |
+      tls.Config{..., InsecureSkipVerify: true, ...}
+    metadata:
+      category: security
+      cwe: "CWE-295"
+    fix: Remove `InsecureSkipVerify: true`. Use a proper certificate or custom CA pool.
+
+  # ── RSA padding ─────────────────────────────────────────────────────────────
+
+  - id: runlit-security/crypto/rsa-pkcs1-encryption
+    languages: [python]
+    severity: HIGH
+    message: >
+      `PKCS1_v1_5.new(key).encrypt(...)` uses PKCS#1 v1.5 encryption padding which is
+      vulnerable to Bleichenbacher padding oracle attacks. Use OAEP padding instead.
+    patterns:
+      - pattern: from Crypto.Cipher import PKCS1_v1_5
+      - pattern: PKCS1_v1_5.new($KEY).encrypt(...)
+    metadata:
+      category: security
+      cwe: "CWE-780"
+    fix: >
+      from Crypto.Cipher import PKCS1_OAEP
+      cipher = PKCS1_OAEP.new(public_key)
+      ciphertext = cipher.encrypt(plaintext)

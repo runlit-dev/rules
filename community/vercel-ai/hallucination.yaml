@@ -1,0 +1,167 @@
+# runlit community rules — Vercel AI SDK hallucinations
+# License: Apache 2.0
+# Vercel AI SDK v3 (March 2024) introduced a new provider model and renamed/removed APIs.
+# AI models trained before late 2024 frequently produce v2 or even beta patterns.
+# Verified against Vercel AI SDK changelog (March 2026, ai>=3.0).
+
+rules:
+  # ── TypeScript / JavaScript ──────────────────────────────────────────────────
+
+  - id: runlit-hallucination/vercel-ai/experimental-stream-data-renamed
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `experimental_StreamData` was renamed to `StreamData` in Vercel AI SDK v3.
+      `experimental_StreamData` no longer exists and will cause a runtime error.
+    patterns:
+      - pattern: import { experimental_StreamData } from "ai"
+      - pattern: import { experimental_StreamData } from 'ai'
+      - pattern: new experimental_StreamData()
+    metadata:
+      category: hallucination
+      library: ai
+      removed_version: "3.0.0"
+      verified_against: "March 2026"
+    fix: import { StreamData } from "ai";
+
+  - id: runlit-hallucination/vercel-ai/experimental-on-function-call-removed
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `experimental_onFunctionCall` was removed in Vercel AI SDK v3.
+      AI function calling is now handled via tools with `onToolCall`.
+    patterns:
+      - pattern: useChat({ ..., experimental_onFunctionCall: ..., ... })
+      - pattern: experimental_onFunctionCall
+    metadata:
+      category: hallucination
+      library: ai
+      removed_version: "3.0.0"
+    fix: >
+      useChat({
+        onToolCall({ toolCall }) {
+          // handle tool call
+        }
+      })
+
+  - id: runlit-hallucination/vercel-ai/old-openai-provider-import
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `import { openai } from "ai/openai"` does not exist in Vercel AI SDK v3.
+      Use the separate `@ai-sdk/openai` package.
+    patterns:
+      - pattern: from "ai/openai"
+      - pattern: from 'ai/openai'
+    metadata:
+      category: hallucination
+      library: ai
+      removed_version: "3.0.0"
+    fix: >
+      import { openai } from "@ai-sdk/openai";
+      // npm install @ai-sdk/openai
+
+  - id: runlit-hallucination/vercel-ai/old-anthropic-provider-import
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `import { anthropic } from "ai/anthropic"` does not exist in Vercel AI SDK v3.
+      Use the separate `@ai-sdk/anthropic` package.
+    patterns:
+      - pattern: from "ai/anthropic"
+      - pattern: from 'ai/anthropic'
+    metadata:
+      category: hallucination
+      library: ai
+      removed_version: "3.0.0"
+    fix: >
+      import { anthropic } from "@ai-sdk/anthropic";
+      // npm install @ai-sdk/anthropic
+
+  - id: runlit-hallucination/vercel-ai/old-openai-stream
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `OpenAIStream` was removed in Vercel AI SDK v3. Use `streamText` or `generateText`
+      from the `ai` package with a provider from `@ai-sdk/openai`.
+    patterns:
+      - pattern: import { OpenAIStream } from "ai"
+      - pattern: import { OpenAIStream } from 'ai'
+      - pattern: OpenAIStream(...)
+    metadata:
+      category: hallucination
+      library: ai
+      removed_version: "3.0.0"
+    fix: >
+      import { streamText } from "ai";
+      import { openai } from "@ai-sdk/openai";
+      const result = streamText({ model: openai("gpt-4o"), messages });
+      return result.toDataStreamResponse();
+
+  - id: runlit-hallucination/vercel-ai/old-anthropic-stream
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `AnthropicStream` was removed in Vercel AI SDK v3. Use `streamText` with `@ai-sdk/anthropic`.
+    patterns:
+      - pattern: import { AnthropicStream } from "ai"
+      - pattern: import { AnthropicStream } from 'ai'
+    metadata:
+      category: hallucination
+      library: ai
+      removed_version: "3.0.0"
+    fix: >
+      import { streamText } from "ai";
+      import { anthropic } from "@ai-sdk/anthropic";
+      const result = streamText({ model: anthropic("claude-opus-4-6"), messages });
+
+  - id: runlit-hallucination/vercel-ai/old-stream-to-response
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `StreamingTextResponse` was removed in Vercel AI SDK v3.
+      Use `result.toDataStreamResponse()` instead.
+    patterns:
+      - pattern: import { StreamingTextResponse } from "ai"
+      - pattern: import { StreamingTextResponse } from 'ai'
+      - pattern: new StreamingTextResponse(...)
+    metadata:
+      category: hallucination
+      library: ai
+      removed_version: "3.0.0"
+    fix: >
+      const result = streamText({ model: openai("gpt-4o"), messages });
+      return result.toDataStreamResponse();
+
+  - id: runlit-hallucination/vercel-ai/old-langchain-adapter-import
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >
+      `import { LangChainAdapter } from "ai"` — the import path changed in v3.
+      Verify you are using the correct adapter path for your SDK version.
+    patterns:
+      - pattern: import { LangChainAdapter } from "ai/langchain"
+      - pattern: import { LangChainAdapter } from 'ai/langchain'
+    metadata:
+      category: hallucination
+      library: ai
+      verified_against: ">=3.0.0"
+    fix: import { LangChainAdapter } from "ai";
+
+  - id: runlit-hallucination/vercel-ai/generate-text-wrong-model-string
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `generateText({ model: "gpt-4o", ... })` — passing a raw string as `model` is invalid
+      in Vercel AI SDK v3. Models must be constructed via provider functions.
+    patterns:
+      - pattern: generateText({ model: "...", ... })
+      - pattern: streamText({ model: "...", ... })
+    metadata:
+      category: hallucination
+      library: ai
+      verified_against: ">=3.0.0"
+    fix: >
+      import { openai } from "@ai-sdk/openai";
+      generateText({ model: openai("gpt-4o"), messages });
+      // Model must be a LanguageModelV1 from a provider, not a raw string

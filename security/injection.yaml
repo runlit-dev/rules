@@ -1,0 +1,248 @@
+# runlit security rules — injection and deserialization vulnerabilities
+# License: Apache 2.0
+# Detects unsafe deserialization, template injection, path traversal, XXE, and SSTI
+# patterns commonly introduced by AI-generated code.
+
+rules:
+  # ── YAML deserialization ─────────────────────────────────────────────────────
+
+  - id: runlit-security/injection/yaml-load-unsafe
+    languages: [python]
+    severity: CRITICAL
+    message: >
+      `yaml.load(data)` without an explicit `Loader=` is deprecated and uses the
+      unsafe `FullLoader` which can deserialize arbitrary Python objects.
+      Use `yaml.safe_load()` for untrusted input.
+    patterns:
+      - pattern: yaml.load($DATA)
+      - pattern: yaml.load($DATA, Loader=yaml.Loader)
+      - pattern: yaml.load($DATA, Loader=yaml.FullLoader)
+    metadata:
+      category: security
+      cwe: "CWE-502"
+    fix: >
+      import yaml
+      data = yaml.safe_load(user_input)  # never deserializes Python objects
+
+  - id: runlit-security/injection/yaml-load-all-unsafe
+    languages: [python]
+    severity: CRITICAL
+    message: >
+      `yaml.load_all(data)` without `Loader=yaml.SafeLoader` deserializes arbitrary
+      Python objects from untrusted input.
+    pattern: yaml.load_all($DATA)
+    metadata:
+      category: security
+      cwe: "CWE-502"
+    fix: yaml.safe_load_all(user_input)
+
+  # ── Python exec injection ────────────────────────────────────────────────────
+
+  - id: runlit-security/injection/python-exec-on-input
+    languages: [python]
+    severity: CRITICAL
+    message: >
+      `exec()` called with user-supplied or external input enables arbitrary code execution.
+      AI models sometimes generate `exec()` as a way to "run code dynamically".
+    patterns:
+      - pattern: exec(request.data)
+      - pattern: exec(request.body)
+      - pattern: exec($INPUT)
+      - pattern: exec(input(...))
+    metadata:
+      category: security
+      cwe: "CWE-94"
+    fix: Remove `exec()`. Never execute user-supplied strings as code.
+
+  # ── Template injection / SSTI ────────────────────────────────────────────────
+
+  - id: runlit-security/injection/jinja2-autoescape-disabled
+    languages: [python]
+    severity: HIGH
+    message: >
+      `Environment(autoescape=False)` disables Jinja2's XSS protection on all templates.
+      In web applications, always enable autoescape for HTML contexts.
+    patterns:
+      - pattern: Environment(autoescape=False)
+      - pattern: jinja2.Environment(autoescape=False)
+      - pattern: Environment(..., autoescape=False, ...)
+    metadata:
+      category: security
+      cwe: "CWE-79"
+    fix: >
+      from jinja2 import Environment, select_autoescape
+      env = Environment(autoescape=select_autoescape(["html", "xml"]))
+
+  - id: runlit-security/injection/jinja2-render-user-template
+    languages: [python]
+    severity: CRITICAL
+    message: >
+      Rendering user-controlled strings as Jinja2 templates enables Server-Side Template
+      Injection (SSTI) — an attacker can execute arbitrary Python code.
+      Templates must come from trusted sources only (files, constants).
+    patterns:
+      - pattern: Environment().from_string($USER_INPUT).render(...)
+      - pattern: $ENV.from_string($REQUEST.data).render(...)
+      - pattern: $ENV.from_string(request.args.$X).render(...)
+    metadata:
+      category: security
+      cwe: "CWE-94"
+    fix: Only render templates loaded from the filesystem with `env.get_template("name.html")`.
+
+  - id: runlit-security/injection/flask-render-template-string-user-input
+    languages: [python]
+    severity: CRITICAL
+    message: >
+      `render_template_string(user_input)` is an SSTI vulnerability — user-controlled
+      template strings can execute arbitrary Python code via `{{ config.__class__.__init__... }}`.
+    patterns:
+      - pattern: render_template_string(request.args.$X)
+      - pattern: render_template_string(request.form.$X)
+      - pattern: render_template_string(request.json.$X)
+      - pattern: render_template_string($USER_INPUT)
+    metadata:
+      category: security
+      cwe: "CWE-94"
+    fix: Use `render_template("template.html", variable=sanitized_value)` from a static file.
+
+  # ── Path traversal ────────────────────────────────────────────────────────────
+
+  - id: runlit-security/injection/open-user-path-python
+    languages: [python]
+    severity: HIGH
+    message: >
+      `open(user_input)` without path canonicalization enables path traversal attacks.
+      An attacker can read `/etc/passwd`, service credentials, or overwrite system files
+      by sending `../../../etc/passwd` as the filename.
+    patterns:
+      - pattern: open(request.args.$X)
+      - pattern: open(request.form.$X)
+      - pattern: open(request.json.$X)
+      - pattern: open(request.data)
+    metadata:
+      category: security
+      cwe: "CWE-22"
+    fix: >
+      import os
+      BASE_DIR = "/safe/base/directory"
+      requested = request.args["file"]
+      safe_path = os.path.realpath(os.path.join(BASE_DIR, requested))
+      if not safe_path.startswith(BASE_DIR + os.sep):
+          raise ValueError("Path traversal detected")
+      with open(safe_path) as f: ...
+
+  - id: runlit-security/injection/path-join-no-realpath
+    languages: [python]
+    severity: HIGH
+    message: >
+      `os.path.join(base_dir, user_input)` without `os.path.realpath()` normalization
+      is vulnerable to path traversal — `../` sequences can escape the base directory.
+    patterns:
+      - pattern: os.path.join($BASE, request.args.$X)
+      - pattern: os.path.join($BASE, request.form.$X)
+      - pattern: os.path.join($BASE, $USER_INPUT)
+    metadata:
+      category: security
+      cwe: "CWE-22"
+    fix: >
+      safe = os.path.realpath(os.path.join(base_dir, user_input))
+      assert safe.startswith(os.path.realpath(base_dir) + os.sep)
+
+  - id: runlit-security/injection/node-path-join-no-resolve
+    languages: [typescript, javascript]
+    severity: HIGH
+    message: >
+      `path.join(baseDir, userInput)` without `path.resolve()` and a containment check
+      is vulnerable to path traversal — `../` sequences can escape the intended directory.
+    patterns:
+      - pattern: path.join($BASE, req.params.$X)
+      - pattern: path.join($BASE, req.query.$X)
+      - pattern: path.join($BASE, req.body.$X)
+    metadata:
+      category: security
+      cwe: "CWE-22"
+    fix: >
+      const resolved = path.resolve(baseDir, userInput);
+      if (!resolved.startsWith(path.resolve(baseDir) + path.sep)) {
+        throw new Error("Path traversal detected");
+      }
+
+  # ── XXE (XML External Entities) ──────────────────────────────────────────────
+
+  - id: runlit-security/injection/lxml-xxe
+    languages: [python]
+    severity: HIGH
+    message: >
+      `lxml.etree.fromstring()` and `lxml.etree.parse()` process external entities by
+      default, enabling XXE attacks — an attacker can read local files or perform SSRF.
+      Use a safe parser that disables entity resolution.
+    patterns:
+      - pattern: lxml.etree.fromstring($DATA)
+      - pattern: etree.fromstring($DATA)
+      - pattern: etree.parse($DATA)
+    metadata:
+      category: security
+      cwe: "CWE-611"
+    fix: >
+      from lxml import etree
+      parser = etree.XMLParser(resolve_entities=False, no_network=True)
+      root = etree.fromstring(xml_data, parser=parser)
+
+  # ── NoSQL injection ───────────────────────────────────────────────────────────
+
+  - id: runlit-security/injection/mongodb-where-clause
+    languages: [python, javascript, typescript]
+    severity: CRITICAL
+    message: >
+      MongoDB `$where` operator executes JavaScript on the server side — passing user
+      input into `$where` enables NoSQL injection and arbitrary JS execution.
+    patterns:
+      - pattern: collection.find({"$where": $USER_INPUT})
+      - pattern: collection.find({'$where': $USER_INPUT})
+    metadata:
+      category: security
+      cwe: "CWE-943"
+    fix: >
+      # Use typed query operators instead of $where:
+      collection.find({"field": {"$eq": sanitized_value}})
+
+  - id: runlit-security/injection/mongodb-unparameterized-query
+    languages: [python]
+    severity: HIGH
+    message: >
+      Constructing a MongoDB query by string formatting or dict from user input without
+      type coercion allows query injection — an attacker can send `{"$gt": ""}` to bypass
+      comparisons intended to be string equality checks.
+    patterns:
+      - pattern: collection.find(request.json)
+      - pattern: collection.find(request.get_json())
+    metadata:
+      category: security
+      cwe: "CWE-943"
+    fix: >
+      # Explicitly extract and validate expected fields
+      body = request.get_json()
+      collection.find({"user_id": str(body["user_id"])})  # coerce to expected type
+
+  # ── Prototype pollution ────────────────────────────────────────────────────────
+
+  - id: runlit-security/injection/node-merge-user-object
+    languages: [typescript, javascript]
+    severity: HIGH
+    message: >
+      Deeply merging user-controlled objects into application objects can enable prototype
+      pollution — `{"__proto__": {"isAdmin": true}}` can poison Object.prototype.
+      Use safe merge utilities (`lodash.mergeWith` with prototype check) or `structuredClone`.
+    patterns:
+      - pattern: Object.assign($TARGET, req.body)
+      - pattern: Object.assign($TARGET, req.body.$X)
+      - pattern: _.merge($TARGET, req.body)
+      - pattern: _.extend($TARGET, req.body)
+    metadata:
+      category: security
+      cwe: "CWE-1321"
+    fix: >
+      // Validate the shape of req.body with a schema first (e.g., Zod, Joi)
+      // Then use Object.assign only with known-safe keys
+      const safe = { name: req.body.name }; // extract known fields explicitly
+      Object.assign(target, safe);

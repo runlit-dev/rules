@@ -89,3 +89,127 @@ rules:
       library: stripe-node
       verified_against: ">=10.0.0"
     fix: Use `stripe.paymentIntents.create({ amount, currency, automatic_payment_methods: { enabled: true } })`.
+
+  # ── Python: Plans API, webhook verification ────────────────────────────────
+
+  - id: runlit-hallucination/stripe-python/plan-create-deprecated
+    languages: [python]
+    severity: WARNING
+    message: >
+      `stripe.Plan.create()` is deprecated. The Plans API was replaced by the Prices API.
+      AI models trained before 2022 still produce the Plans pattern.
+    patterns:
+      - pattern: stripe.Plan.create(...)
+      - pattern: stripe.Plan.retrieve(...)
+    metadata:
+      category: deprecated
+      library: stripe-python
+      verified_against: ">=2.0.0"
+    fix: >
+      # Create a Price instead
+      price = stripe.Price.create(
+          unit_amount=1000,
+          currency="usd",
+          recurring={"interval": "month"},
+          product="prod_xxx",
+      )
+
+  - id: runlit-hallucination/stripe-python/subscription-wrong-plan-param
+    languages: [python]
+    severity: WARNING
+    message: >
+      `stripe.Subscription.create(customer=..., plan=...)` — the `plan` parameter is
+      deprecated. Use `items=[{"price": price_id}]`.
+    pattern: stripe.Subscription.create(..., plan=..., ...)
+    metadata:
+      category: deprecated
+      library: stripe-python
+      verified_against: ">=3.0.0"
+    fix: >
+      stripe.Subscription.create(
+          customer=customer_id,
+          items=[{"price": "price_xxx"}],
+      )
+
+  - id: runlit-hallucination/stripe-python/webhook-construct-event-wrong-args
+    languages: [python]
+    severity: ERROR
+    message: >
+      `stripe.Webhook.construct_event(payload, sig_header, secret)` — the parameter
+      order is `(payload, sig_header, endpoint_secret)`. AI models frequently swap
+      `sig_header` and `endpoint_secret`, causing `stripe.error.SignatureVerificationError`.
+    pattern: stripe.Webhook.construct_event($PAYLOAD, $SECRET, $SIG)
+    metadata:
+      category: hallucination
+      library: stripe-python
+      verified_against: ">=5.0.0"
+    fix: >
+      event = stripe.Webhook.construct_event(
+          payload=request.data,           # 1: raw bytes
+          sig_header=request.headers["Stripe-Signature"],  # 2: header
+          secret=endpoint_secret,          # 3: webhook secret
+      )
+
+  - id: runlit-hallucination/stripe-python/customer-source-deprecated
+    languages: [python]
+    severity: WARNING
+    message: >
+      `stripe.Customer.create(source=token)` — the `source` parameter is legacy (Charges API).
+      For new integrations, attach PaymentMethods instead.
+    pattern: stripe.Customer.create(..., source=..., ...)
+    metadata:
+      category: deprecated
+      library: stripe-python
+      verified_against: ">=5.0.0"
+    fix: >
+      # Create customer, then attach PaymentMethod
+      customer = stripe.Customer.create(email=email)
+      stripe.PaymentMethod.attach(pm_id, customer=customer.id)
+      stripe.Customer.modify(customer.id, invoice_settings={"default_payment_method": pm_id})
+
+  # ── TypeScript / Node.js: additional patterns ────────────────────────────
+
+  - id: runlit-hallucination/stripe-node/plan-create-deprecated
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >
+      `stripe.plans.create()` is deprecated. Use `stripe.prices.create()` instead.
+    patterns:
+      - pattern: $STRIPE.plans.create(...)
+      - pattern: $STRIPE.plans.retrieve(...)
+    metadata:
+      category: deprecated
+      library: stripe-node
+      verified_against: ">=10.0.0"
+    fix: stripe.prices.create({ unit_amount: 1000, currency: "usd", recurring: { interval: "month" }, product: "prod_xxx" })
+
+  - id: runlit-hallucination/stripe-node/webhook-wrong-arg-order
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `stripe.webhooks.constructEvent(body, secret, sig)` — the parameter order is
+      `(body, sig, secret)`. Swapping `sig` and `secret` causes `StripeSignatureVerificationError`.
+    pattern: $STRIPE.webhooks.constructEvent($BODY, $SECRET, $SIG)
+    metadata:
+      category: hallucination
+      library: stripe-node
+      verified_against: ">=10.0.0"
+    fix: >
+      const event = stripe.webhooks.constructEvent(
+        body,                                  // 1: raw buffer/string
+        request.headers["stripe-signature"],   // 2: Stripe-Signature header
+        process.env.STRIPE_WEBHOOK_SECRET!,    // 3: webhook endpoint secret
+      );
+
+  - id: runlit-hallucination/stripe-node/subscription-wrong-plan-param
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >
+      `stripe.subscriptions.create({ customer, plan })` — the `plan` parameter is
+      deprecated. Use `items: [{ price: priceId }]`.
+    pattern: $STRIPE.subscriptions.create({ ..., plan: ..., ... })
+    metadata:
+      category: deprecated
+      library: stripe-node
+      verified_against: ">=10.0.0"
+    fix: stripe.subscriptions.create({ customer: customerId, items: [{ price: "price_xxx" }] })

@@ -1,0 +1,145 @@
+# runlit community rules — HuggingFace Transformers hallucinations
+# License: Apache 2.0
+# AI models frequently produce removed, renamed, or misused HuggingFace Transformers APIs.
+# Verified against transformers changelog (March 2026, transformers>=4.40).
+
+rules:
+  # ── Python ──────────────────────────────────────────────────────────────────
+
+  - id: runlit-hallucination/huggingface/model-predict-removed
+    languages: [python]
+    severity: ERROR
+    message: >
+      `.predict()` does not exist on HuggingFace model objects. This method was never part
+      of the Transformers API — it is a scikit-learn convention hallucinated by AI models.
+      Call the model directly: `outputs = model(**inputs)` or use a `pipeline`.
+    pattern: $MODEL.predict(...)
+    metadata:
+      category: hallucination
+      library: transformers
+      verified_against: ">=4.0.0"
+    fix: >
+      inputs = tokenizer(text, return_tensors="pt")
+      with torch.no_grad():
+          outputs = model(**inputs)
+
+  - id: runlit-hallucination/huggingface/pipeline-use-gpu-kwarg
+    languages: [python]
+    severity: ERROR
+    message: >
+      `pipeline(..., use_gpu=True)` — `use_gpu` is not a valid parameter.
+      AI models hallucinate this kwarg. Use `device=0` for the first GPU or `device="cuda"`.
+    pattern: pipeline(..., use_gpu=..., ...)
+    metadata:
+      category: hallucination
+      library: transformers
+      verified_against: ">=4.0.0"
+    fix: Use `pipeline("text-generation", model="...", device=0)` for GPU.
+
+  - id: runlit-hallucination/huggingface/deprecated-use-auth-token
+    languages: [python]
+    severity: WARNING
+    message: >
+      `use_auth_token=` is deprecated in transformers>=4.34. Use `token=` instead.
+      `use_auth_token` will be removed in a future version.
+    patterns:
+      - pattern: AutoModel.from_pretrained(..., use_auth_token=..., ...)
+      - pattern: AutoTokenizer.from_pretrained(..., use_auth_token=..., ...)
+      - pattern: AutoModelForCausalLM.from_pretrained(..., use_auth_token=..., ...)
+      - pattern: AutoModelForSeq2SeqLM.from_pretrained(..., use_auth_token=..., ...)
+      - pattern: pipeline(..., use_auth_token=..., ...)
+    metadata:
+      category: deprecated
+      library: transformers
+      deprecated_version: "4.34.0"
+    fix: Replace `use_auth_token="hf_..."` with `token="hf_..."`.
+
+  - id: runlit-hallucination/huggingface/tokenizer-encode-as-model-input
+    languages: [python]
+    severity: ERROR
+    message: >
+      `tokenizer.encode(text)` returns a plain Python `list[int]` — passing it directly
+      to a model raises `TypeError`. Models require a dict with tensor values.
+      Use `tokenizer(text, return_tensors="pt")` which returns the correct input dict.
+    patterns:
+      - pattern: $MODEL(tokenizer.encode(...))
+      - pattern: $MODEL(**tokenizer.encode(...))
+    metadata:
+      category: hallucination
+      library: transformers
+      verified_against: ">=4.0.0"
+    fix: inputs = tokenizer(text, return_tensors="pt"); outputs = model(**inputs)
+
+  - id: runlit-hallucination/huggingface/incompatible-do-sample-temperature
+    languages: [python]
+    severity: WARNING
+    message: >
+      Setting `temperature` without `do_sample=True` has no effect on output
+      and will raise a `UserWarning` in recent transformers versions.
+      Temperature only applies when sampling is enabled.
+    patterns:
+      - pattern: $MODEL.generate(..., temperature=$T, ...)
+      - pattern: $PIPELINE(..., temperature=$T, ...)
+    metadata:
+      category: hallucination
+      library: transformers
+      verified_against: ">=4.40.0"
+    fix: Add `do_sample=True` when using `temperature`, `top_p`, or `top_k`.
+
+  - id: runlit-hallucination/huggingface/generate-missing-pad-token-id
+    languages: [python]
+    severity: WARNING
+    message: >
+      Calling `model.generate()` without `pad_token_id` on a model whose tokenizer
+      has no `pad_token` (e.g. GPT-2, LLaMA) causes an unhelpful warning and can
+      produce garbage output. Set `pad_token_id=tokenizer.eos_token_id`.
+    pattern: $MODEL.generate($INPUT_IDS)
+    metadata:
+      category: hallucination
+      library: transformers
+      verified_against: ">=4.20.0"
+    fix: model.generate(input_ids, pad_token_id=tokenizer.eos_token_id, max_new_tokens=200)
+
+  - id: runlit-hallucination/huggingface/hallucinated-pipeline-generate
+    languages: [python]
+    severity: ERROR
+    message: >
+      Pipeline objects are callable — calling `.generate()` on a pipeline result
+      does not exist. `pipe(text)` already returns the generated outputs.
+      AI models hallucinate a `.generate()` step after calling the pipeline.
+    pattern: $PIPE(...).generate(...)
+    metadata:
+      category: hallucination
+      library: transformers
+      verified_against: ">=4.0.0"
+    fix: outputs = pipe(text, max_new_tokens=200)  # pipeline is already callable
+
+  - id: runlit-hallucination/huggingface/wrong-device-map-auto-with-device
+    languages: [python]
+    severity: ERROR
+    message: >
+      Setting both `device_map="auto"` and `device=...` raises a `ValueError`.
+      `device_map` controls device placement automatically — do not combine with `device`.
+    patterns:
+      - pattern: AutoModel.from_pretrained(..., device_map="auto", ..., device=..., ...)
+      - pattern: AutoModelForCausalLM.from_pretrained(..., device_map="auto", ..., device=..., ...)
+    metadata:
+      category: hallucination
+      library: transformers
+      verified_against: ">=4.20.0"
+    fix: Use only `device_map="auto"` — remove the `device=` argument.
+
+  - id: runlit-hallucination/huggingface/deprecated-revision-main-for-gated
+    languages: [python]
+    severity: WARNING
+    message: >
+      `from_pretrained("meta-llama/Llama-3.3-70B-Instruct")` without `token=` will fail
+      for gated models. Add `token=os.environ["HUGGINGFACE_TOKEN"]` and accept model license.
+    patterns:
+      - pattern: AutoModelForCausalLM.from_pretrained("meta-llama/...")
+      - pattern: AutoModelForCausalLM.from_pretrained('meta-llama/...')
+    metadata:
+      category: hallucination
+      library: transformers
+      verified_against: ">=4.40.0"
+    fix: AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.3-70B-Instruct", token=os.environ["HUGGINGFACE_TOKEN"])

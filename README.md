@@ -20,7 +20,14 @@ rules:
     - community/openai
     - community/langchain
     - community/anthropic
+    - community/google-ai
+    - community/huggingface
+    - community/llamaindex
+    - community/pinecone
+    - community/vercel-ai
     - security/secrets
+    - security/crypto
+    - security/injection
 ```
 
 ## Rule format
@@ -45,16 +52,23 @@ references:
 
 | Pack | Rules | What it covers |
 |---|---|---|
-| `community/stripe` | 6 | `attach_async` (never existed), deprecated `charge.create`, wrong kwargs, `confirm_async` |
-| `community/openai` | 7 | `Edit` endpoint removed, legacy `Completion`, v0 `api_key`, `ChatCompletion` v0, `stream_to_file`, Node.js v3 imports |
-| `community/langchain` | 7 | Post-v0.1 package split wrong imports (ChatOpenAI, OpenAI, Embeddings, schema, vectorstores, memory), deprecated `.run()` |
-| `community/anthropic` | 5 | v0 completion API, wrong model names, wrong `stop_reason`, Node SDK v0, wrong package name |
+| `community/openai` | 18 | `Edit` endpoint removed, legacy `Completion`/`ChatCompletion` v0, v0 `api_key`, `stream_to_file`, Node.js v3 imports, Assistants v2 (`file_ids` removed), DALL-E v0, Whisper v0, outdated model names, `o1`/`o3` wrong params, structured output confusion |
+| `community/anthropic` | 12 | v0 completion API, wrong model names (March 2026), wrong `stop_reason`, Node SDK v0, wrong package name, extended thinking format, tool result type, batch API (`beta` prefix removed), vision image format, wrong current model IDs |
+| `community/langchain` | 15 | Post-v0.2 import paths (ChatOpenAI, OpenAI, Embeddings, schema, vectorstores, memory), deprecated `.run()`, `LLMChain`/`ConversationChain`/`SequentialChain` removed, LCEL `.invoke()` wrong arg, LangGraph import/node errors, `hub.pull` missing package |
+| `community/stripe` | 13 | `attach_async` (never existed), deprecated `charge.create`, wrong kwargs, `confirm_async`, Plans API deprecated, wrong webhook arg order, `source` param legacy, Prices API migration |
+| `community/google-ai` | 10 | Old `google-generativeai` SDK (`configure`, `GenerativeModel`, wrong import), retired model names (`gemini-pro`, `gemini-pro-vision`, `gemini-ultra`), `start_chat`, `count_tokens`, `embedding-001`, Node.js legacy package |
+| `community/huggingface` | 9 | Hallucinated `.predict()`, `use_gpu` kwarg, deprecated `use_auth_token`, `tokenizer.encode()` as model input, incompatible `temperature`/`do_sample`, missing `pad_token_id`, `.generate()` on pipeline, `device_map` + `device` conflict, gated model token |
+| `community/llamaindex` | 9 | Old `from llama_index import ...` paths (v0.10 breaking change), `GPTSimpleVectorIndex`/`GPTTreeIndex` hallucinated classes, `ServiceContext` deprecated, `LLMPredictor` removed, old LLM/embeddings imports, `query()` return type confusion |
+| `community/pinecone` | 9 | `pinecone.init()` removed (v3), `pinecone.Index()`/`create_index()`/`list_indexes()`/`delete_index()` module-level functions removed, old `environment` param, tuple upsert deprecated, `PineconeClient` renamed to `Pinecone` |
+| `community/vercel-ai` | 9 | `experimental_StreamData` renamed, `experimental_onFunctionCall` removed, `ai/openai` / `ai/anthropic` import paths removed, `OpenAIStream`/`AnthropicStream` removed, `StreamingTextResponse` removed, `LangChainAdapter` path, raw string as model |
 
 ### Security packs
 
 | Pack | Rules | What it covers |
 |---|---|---|
 | `security/secrets` | 8 | Hardcoded API keys, secrets in logs, `eval`-on-input (Python+Node), `pickle.loads`, `subprocess shell=True`, Go SQL format injection |
+| `security/crypto` | 14 | MD5/SHA1 for passwords, SHA-256 without salt, AES-ECB mode, DES/3DES, hardcoded IV, `random` for tokens (Python+JS), `requests verify=False`, `ssl.CERT_NONE`, `NODE_TLS_REJECT_UNAUTHORIZED=0`, HTTPS `rejectUnauthorized:false`, Go `InsecureSkipVerify`, RSA PKCS1v15 padding |
+| `security/injection` | 13 | `yaml.load()` unsafe, `yaml.load_all()` unsafe, `exec()` on input, Jinja2 `autoescape=False`, SSTI via `from_string(user_input)`, Flask `render_template_string(user_input)`, path traversal (`open(request.x)`, `os.path.join` without `realpath`), Node path traversal, lxml XXE, MongoDB `$where` injection, MongoDB unparameterized query, prototype pollution via `Object.assign(target, req.body)` |
 
 ## Contributing
 

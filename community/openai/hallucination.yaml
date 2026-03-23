@@ -111,3 +111,200 @@ rules:
       library: openai-node
       breaking_version: "4.0.0"
     fix: Use `client.chat.completions.create({ model: "gpt-4o", messages: [...] })`.
+
+  # ── Python: Assistants v2 / Files / Images / Audio ─────────────────────────
+
+  - id: runlit-hallucination/openai-python/assistants-v1-file-ids
+    languages: [python]
+    severity: ERROR
+    message: >
+      `assistant.file_ids` was removed in the Assistants v2 API (April 2024).
+      Files are now attached via `tool_resources` with a `vector_store`.
+      AI models trained before mid-2024 produce the old `file_ids` pattern.
+    patterns:
+      - pattern: client.beta.assistants.create(..., file_ids=..., ...)
+      - pattern: client.beta.assistants.update(..., file_ids=..., ...)
+    metadata:
+      category: hallucination
+      library: openai-python
+      removed_version: "v2 Assistants API"
+      verified_against: ">=1.14.0"
+    fix: >
+      # Upload file and create vector store
+      vs = client.beta.vector_stores.create()
+      client.beta.vector_stores.files.create(vector_store_id=vs.id, file_id=file_id)
+      client.beta.assistants.create(
+          model="gpt-4o",
+          tools=[{"type": "file_search"}],
+          tool_resources={"file_search": {"vector_store_ids": [vs.id]}}
+      )
+
+  - id: runlit-hallucination/openai-python/assistants-v1-files-create
+    languages: [python]
+    severity: ERROR
+    message: >
+      `client.beta.assistants.files.create()` was removed in Assistants v2 (April 2024).
+      Use `client.beta.vector_stores.files.create()` instead.
+    pattern: $CLIENT.beta.assistants.files.create(...)
+    metadata:
+      category: hallucination
+      library: openai-python
+      removed_version: "v2 Assistants API"
+    fix: client.beta.vector_stores.files.create(vector_store_id=vs_id, file_id=file_id)
+
+  - id: runlit-hallucination/openai-python/dalle-v0-image-create
+    languages: [python]
+    severity: ERROR
+    message: >
+      `openai.Image.create()` is the openai v0.x DALL-E API.
+      In openai>=1.0.0 use `client.images.generate()`.
+    pattern: openai.Image.create(...)
+    metadata:
+      category: deprecated
+      library: openai-python
+      breaking_version: "1.0.0"
+    fix: >
+      response = client.images.generate(model="dall-e-3", prompt="...", n=1, size="1024x1024")
+      url = response.data[0].url
+
+  - id: runlit-hallucination/openai-python/audio-transcribe-v0
+    languages: [python]
+    severity: ERROR
+    message: >
+      `openai.Audio.transcribe()` is the openai v0.x API.
+      In openai>=1.0.0, use `client.audio.transcriptions.create()`.
+    patterns:
+      - pattern: openai.Audio.transcribe(...)
+      - pattern: openai.Audio.translate(...)
+    metadata:
+      category: deprecated
+      library: openai-python
+      breaking_version: "1.0.0"
+    fix: >
+      with open("audio.mp3", "rb") as f:
+          transcript = client.audio.transcriptions.create(model="whisper-1", file=f)
+
+  - id: runlit-hallucination/openai-python/outdated-model-names
+    languages: [python]
+    severity: WARNING
+    message: >
+      Outdated GPT model name. As of March 2026, recommended models are `gpt-4o`,
+      `gpt-4o-mini`, `o3`, `o4-mini`. AI models frequently hallucinate old model IDs.
+    patterns:
+      - pattern: model="gpt-4-turbo-preview"
+      - pattern: model="gpt-4-0613"
+      - pattern: model="gpt-4-32k"
+      - pattern: model="gpt-3.5-turbo-0301"
+      - pattern: model="text-davinci-003"
+      - pattern: model="text-davinci-002"
+    metadata:
+      category: deprecated
+      library: openai-python
+      verified_against: "March 2026"
+    fix: Use `model="gpt-4o"` or `model="gpt-4o-mini"` for production.
+
+  - id: runlit-hallucination/openai-python/o1-wrong-parameters
+    languages: [python]
+    severity: ERROR
+    message: >
+      `o1`, `o3`, and `o4` reasoning models do not support `system` role messages,
+      `temperature`, `top_p`, or `stream` parameters in many configurations.
+      AI models often apply standard Chat Completions parameters to reasoning models.
+    patterns:
+      - pattern: client.chat.completions.create(model="o1", ..., temperature=..., ...)
+      - pattern: client.chat.completions.create(model="o3", ..., temperature=..., ...)
+      - pattern: client.chat.completions.create(model="o4-mini", ..., temperature=..., ...)
+    metadata:
+      category: hallucination
+      library: openai-python
+      verified_against: "March 2026"
+    fix: >
+      # o-series reasoning models: omit temperature, top_p; use max_completion_tokens
+      client.chat.completions.create(
+          model="o3",
+          messages=[{"role": "user", "content": "..."}],
+          max_completion_tokens=4096
+      )
+
+  - id: runlit-hallucination/openai-python/structured-output-wrong-format
+    languages: [python]
+    severity: ERROR
+    message: >
+      `response_format={"type": "json_object"}` enables JSON mode but does NOT guarantee
+      schema conformance. For structured outputs with schema validation, use
+      `response_format={"type": "json_schema", "json_schema": {...}}` or the
+      `client.beta.chat.completions.parse()` method with a Pydantic model.
+      AI models commonly confuse JSON mode with structured outputs.
+    pattern: client.chat.completions.create(..., response_format={"type": "json_object"}, ...)
+    metadata:
+      category: hallucination
+      library: openai-python
+      verified_against: ">=1.40.0"
+    fix: >
+      from pydantic import BaseModel
+      class MyResponse(BaseModel):
+          name: str
+          value: int
+      result = client.beta.chat.completions.parse(
+          model="gpt-4o",
+          messages=[...],
+          response_format=MyResponse
+      )
+
+  # ── TypeScript / Node.js: additional patterns ──────────────────────────────
+
+  - id: runlit-hallucination/openai-node/dalle-v0-image-create
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `openai.createImage()` is the openai-node v3.x DALL-E API.
+      In openai-node v4+, use `client.images.generate()`.
+    pattern: $OPENAI.createImage(...)
+    metadata:
+      category: deprecated
+      library: openai-node
+      breaking_version: "4.0.0"
+    fix: >
+      const response = await openai.images.generate({ model: "dall-e-3", prompt: "...", n: 1 });
+      const url = response.data[0].url;
+
+  - id: runlit-hallucination/openai-node/audio-transcribe-v3
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `openai.createTranscription()` is the openai-node v3.x Whisper API.
+      In openai-node v4+, use `client.audio.transcriptions.create()`.
+    patterns:
+      - pattern: $OPENAI.createTranscription(...)
+      - pattern: $OPENAI.createTranslation(...)
+    metadata:
+      category: deprecated
+      library: openai-node
+      breaking_version: "4.0.0"
+    fix: >
+      const transcript = await openai.audio.transcriptions.create({
+        model: "whisper-1",
+        file: fs.createReadStream("audio.mp3"),
+      });
+
+  - id: runlit-hallucination/openai-node/assistants-v1-file-ids
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `fileIds` / `file_ids` on assistant creation is the Assistants v1 API, removed in v2.
+      Use `toolResources` with a vector store instead.
+    patterns:
+      - pattern: openai.beta.assistants.create({ ..., fileIds: ..., ... })
+      - pattern: openai.beta.assistants.create({ ..., file_ids: ..., ... })
+    metadata:
+      category: hallucination
+      library: openai-node
+      removed_version: "v2 Assistants API"
+    fix: >
+      const vectorStore = await openai.beta.vectorStores.create();
+      await openai.beta.vectorStores.files.create(vectorStore.id, { file_id: fileId });
+      await openai.beta.assistants.create({
+        model: "gpt-4o",
+        tools: [{ type: "file_search" }],
+        tool_resources: { file_search: { vector_store_ids: [vectorStore.id] } },
+      });

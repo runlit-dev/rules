@@ -1,0 +1,149 @@
+# runlit community rules — Pinecone SDK hallucinations
+# License: Apache 2.0
+# Pinecone Python client v3 (2024) removed all module-level procedural functions.
+# pinecone.init() / pinecone.Index() / pinecone.create_index() are all gone.
+# AI models trained before mid-2024 almost always produce v2 code.
+# Verified against pinecone-client changelog (March 2026, pinecone>=3.0).
+
+rules:
+  # ── Python: v2 procedural API ────────────────────────────────────────────────
+
+  - id: runlit-hallucination/pinecone-python/init-removed
+    languages: [python]
+    severity: ERROR
+    message: >
+      `pinecone.init(api_key=..., environment=...)` was removed in pinecone v3 (2024).
+      The client is now object-oriented. Create a `Pinecone` instance instead.
+      Calling `init()` raises `AttributeError` on pinecone>=3.0.0.
+    pattern: pinecone.init(...)
+    metadata:
+      category: hallucination
+      library: pinecone-client
+      removed_version: "3.0.0"
+      verified_against: "March 2026"
+    fix: >
+      from pinecone import Pinecone
+      pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
+
+  - id: runlit-hallucination/pinecone-python/module-level-create-index
+    languages: [python]
+    severity: ERROR
+    message: >
+      `pinecone.create_index(...)` was removed in pinecone v3. Use `pc.create_index(...)`.
+    pattern: pinecone.create_index(...)
+    metadata:
+      category: hallucination
+      library: pinecone-client
+      removed_version: "3.0.0"
+    fix: >
+      pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
+      pc.create_index(name="my-index", dimension=1536, metric="cosine",
+                      spec=ServerlessSpec(cloud="aws", region="us-east-1"))
+
+  - id: runlit-hallucination/pinecone-python/module-level-index
+    languages: [python]
+    severity: ERROR
+    message: >
+      `pinecone.Index(index_name)` was removed in pinecone v3. Use `pc.Index(index_name)`.
+    pattern: pinecone.Index(...)
+    metadata:
+      category: hallucination
+      library: pinecone-client
+      removed_version: "3.0.0"
+    fix: >
+      pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
+      index = pc.Index("my-index")
+
+  - id: runlit-hallucination/pinecone-python/module-level-list-indexes
+    languages: [python]
+    severity: ERROR
+    message: >
+      `pinecone.list_indexes()` was removed in pinecone v3. Use `pc.list_indexes()`.
+    pattern: pinecone.list_indexes(...)
+    metadata:
+      category: hallucination
+      library: pinecone-client
+      removed_version: "3.0.0"
+    fix: pc.list_indexes()
+
+  - id: runlit-hallucination/pinecone-python/module-level-delete-index
+    languages: [python]
+    severity: ERROR
+    message: >
+      `pinecone.delete_index(...)` was removed in pinecone v3. Use `pc.delete_index(...)`.
+    pattern: pinecone.delete_index(...)
+    metadata:
+      category: hallucination
+      library: pinecone-client
+      removed_version: "3.0.0"
+    fix: pc.delete_index("my-index")
+
+  - id: runlit-hallucination/pinecone-python/old-environment-param
+    languages: [python]
+    severity: ERROR
+    message: >
+      `environment=` is no longer a valid parameter for Pinecone (removed in v3 with serverless).
+      Serverless indexes use a `ServerlessSpec(cloud=..., region=...)` in `create_index`.
+    patterns:
+      - pattern: Pinecone(..., environment=..., ...)
+      - pattern: pinecone.init(..., environment=..., ...)
+    metadata:
+      category: hallucination
+      library: pinecone-client
+      removed_version: "3.0.0"
+    fix: >
+      from pinecone import Pinecone, ServerlessSpec
+      pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
+      pc.create_index(name="my-index", dimension=1536, metric="cosine",
+                      spec=ServerlessSpec(cloud="aws", region="us-east-1"))
+
+  - id: runlit-hallucination/pinecone-python/old-upsert-tuple-format
+    languages: [python]
+    severity: WARNING
+    message: >
+      Upserting tuples `(id, vector)` or `(id, vector, metadata)` is deprecated in
+      pinecone v3. Use dicts or `Vector` objects: `{"id": ..., "values": ..., "metadata": ...}`.
+    patterns:
+      - pattern: index.upsert(vectors=[($ID, $VEC), ...])
+      - pattern: index.upsert(vectors=[($ID, $VEC, $META), ...])
+    metadata:
+      category: deprecated
+      library: pinecone-client
+      deprecated_version: "3.0.0"
+    fix: >
+      index.upsert(vectors=[
+          {"id": "vec1", "values": [0.1, 0.2, ...], "metadata": {"text": "..."}}
+      ])
+
+  # ── TypeScript / Node.js ────────────────────────────────────────────────────
+
+  - id: runlit-hallucination/pinecone-node/old-init-pattern
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `const pinecone = new PineconeClient(); await pinecone.init({...})` is the v0/v1 pattern.
+      In @pinecone-database/pinecone v2+, instantiate directly:
+      `const pc = new Pinecone({ apiKey: process.env.PINECONE_API_KEY })`.
+    pattern: $CLIENT.init(...)
+    metadata:
+      category: hallucination
+      library: "@pinecone-database/pinecone"
+      removed_version: "2.0.0"
+    fix: >
+      import { Pinecone } from "@pinecone-database/pinecone";
+      const pc = new Pinecone({ apiKey: process.env.PINECONE_API_KEY! });
+
+  - id: runlit-hallucination/pinecone-node/old-pinecone-client-import
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `import { PineconeClient } from "@pinecone-database/pinecone"` — `PineconeClient` 
+      was renamed to `Pinecone` in v2.0 of the Node SDK.
+    patterns:
+      - pattern: import { PineconeClient } from "@pinecone-database/pinecone"
+      - pattern: import { PineconeClient } from '@pinecone-database/pinecone'
+    metadata:
+      category: hallucination
+      library: "@pinecone-database/pinecone"
+      removed_version: "2.0.0"
+    fix: import { Pinecone } from "@pinecone-database/pinecone";

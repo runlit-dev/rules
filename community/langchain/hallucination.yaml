@@ -102,3 +102,149 @@ rules:
       library: langchain
       deprecated_version: "0.2.0"
     fix: Use `$CHAIN.invoke({"input": ...})`.
+
+  # ── Deprecated chain classes (v0.2+) ────────────────────────────────────────
+
+  - id: runlit-hallucination/langchain/llm-chain-deprecated
+    languages: [python]
+    severity: WARNING
+    message: >
+      `LLMChain` is deprecated in LangChain v0.2 and removed in v0.3.
+      Use LangChain Expression Language (LCEL): `chain = prompt | llm | output_parser`.
+    patterns:
+      - pattern: from langchain.chains import LLMChain
+      - pattern: from langchain_core.chains import LLMChain
+      - pattern: LLMChain(llm=..., prompt=...)
+    metadata:
+      category: deprecated
+      library: langchain
+      deprecated_version: "0.2.0"
+      removed_version: "0.3.0"
+    fix: >
+      from langchain_core.prompts import ChatPromptTemplate
+      from langchain_openai import ChatOpenAI
+      prompt = ChatPromptTemplate.from_messages([("user", "{input}")])
+      chain = prompt | ChatOpenAI(model="gpt-4o") | StrOutputParser()
+      chain.invoke({"input": "Hello"})
+
+  - id: runlit-hallucination/langchain/conversation-chain-deprecated
+    languages: [python]
+    severity: WARNING
+    message: >
+      `ConversationChain` is deprecated in LangChain v0.2. Use LCEL with explicit
+      message history management via `RunnableWithMessageHistory` or `ChatHistory`.
+    patterns:
+      - pattern: from langchain.chains import ConversationChain
+      - pattern: ConversationChain(llm=...)
+    metadata:
+      category: deprecated
+      library: langchain
+      deprecated_version: "0.2.0"
+    fix: >
+      from langchain_core.runnables.history import RunnableWithMessageHistory
+      # Use RunnableWithMessageHistory to wrap your LCEL chain with history
+
+  - id: runlit-hallucination/langchain/agent-executor-from-agent-and-tools
+    languages: [python]
+    severity: WARNING
+    message: >
+      `AgentExecutor.from_agent_and_tools()` is deprecated in v0.2.
+      Use `create_react_agent` or `create_tool_calling_agent` with LCEL-based agents.
+    patterns:
+      - pattern: AgentExecutor.from_agent_and_tools(...)
+      - pattern: from langchain.agents import initialize_agent
+    metadata:
+      category: deprecated
+      library: langchain
+      deprecated_version: "0.2.0"
+    fix: >
+      from langchain.agents import create_tool_calling_agent, AgentExecutor
+      agent = create_tool_calling_agent(llm, tools, prompt)
+      executor = AgentExecutor(agent=agent, tools=tools)
+
+  - id: runlit-hallucination/langchain/sequential-chain-deprecated
+    languages: [python]
+    severity: WARNING
+    message: >
+      `SequentialChain` and `SimpleSequentialChain` are deprecated in v0.2.
+      Chain steps together with the LCEL pipe operator instead: `chain1 | chain2`.
+    patterns:
+      - pattern: from langchain.chains import SequentialChain
+      - pattern: from langchain.chains import SimpleSequentialChain
+      - pattern: SequentialChain(chains=...)
+      - pattern: SimpleSequentialChain(chains=...)
+    metadata:
+      category: deprecated
+      library: langchain
+      deprecated_version: "0.2.0"
+    fix: chain = chain1 | chain2 | chain3  # LCEL pipe operator
+
+  # ── LCEL usage errors ────────────────────────────────────────────────────────
+
+  - id: runlit-hallucination/langchain/lcel-wrong-invoke-key
+    languages: [python]
+    severity: WARNING
+    message: >
+      LCEL `.invoke()` takes a dict matching the prompt's input variables.
+      Passing the raw string to `.invoke()` instead of a dict with the correct key
+      raises `KeyError` or `ValidationError` at runtime.
+    patterns:
+      - pattern: $CHAIN.invoke("...")
+    metadata:
+      category: hallucination
+      library: langchain
+      verified_against: ">=0.2.0"
+    fix: chain.invoke({"input": "your question"})  # key must match prompt variable name
+
+  # ── LangGraph errors ─────────────────────────────────────────────────────────
+
+  - id: runlit-hallucination/langchain/langgraph-wrong-import
+    languages: [python]
+    severity: ERROR
+    message: >
+      `from langchain.graphs import StateGraph` — `StateGraph` is in `langgraph`, not
+      `langchain`. AI models confuse these two packages.
+    patterns:
+      - pattern: from langchain.graphs import StateGraph
+      - pattern: from langchain_core.graphs import StateGraph
+    metadata:
+      category: hallucination
+      library: langgraph
+      verified_against: ">=0.1.0"
+    fix: >
+      from langgraph.graph import StateGraph, END
+      # pip install langgraph
+
+  - id: runlit-hallucination/langchain/langgraph-add-node-wrong-signature
+    languages: [python]
+    severity: ERROR
+    message: >
+      `graph.add_node("name", function)` is valid, but AI models sometimes pass a dict
+      or class instance instead of a callable, or call `add_node` with keyword args
+      that don't match the LangGraph API. Each node must be a callable `(state) -> state`.
+    pattern: $GRAPH.add_node($NAME, $NODE.run)
+    metadata:
+      category: hallucination
+      library: langgraph
+      verified_against: ">=0.1.0"
+    fix: >
+      def my_node(state: dict) -> dict:
+          return {...state, "result": "..."}
+      graph.add_node("my_node", my_node)
+
+  - id: runlit-hallucination/langchain/hub-pull-missing-import
+    languages: [python]
+    severity: ERROR
+    message: >
+      `from langchain import hub; hub.pull(...)` — `hub` is not importable from `langchain`.
+      It requires `from langchain import hub` after installing `langchainhub`.
+      AI models often skip the `langchainhub` package installation.
+    pattern: from langchain import hub
+    metadata:
+      category: hallucination
+      library: langchainhub
+      verified_against: ">=0.1.0"
+    fix: >
+      # pip install langchainhub
+      from langchain import hub
+      prompt = hub.pull("hwchase17/react")

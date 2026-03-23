@@ -76,3 +76,143 @@ rules:
       category: hallucination
       library: "@anthropic-ai/sdk"
     fix: Use `import Anthropic from '@anthropic-ai/sdk'`.
+
+  # ── Python: extended thinking, tool use, batch API ────────────────────────
+
+  - id: runlit-hallucination/anthropic-python/extended-thinking-wrong-format
+    languages: [python]
+    severity: ERROR
+    message: >
+      `thinking=True` is not the correct format for Claude extended thinking.
+      The correct parameter is `thinking={"type": "enabled", "budget_tokens": N}`.
+      AI models frequently hallucinate simpler boolean or dict formats.
+    patterns:
+      - pattern: client.messages.create(..., thinking=True, ...)
+      - pattern: client.messages.create(..., thinking={"enabled": True}, ...)
+      - pattern: client.messages.create(..., thinking="enabled", ...)
+    metadata:
+      category: hallucination
+      library: anthropic-python
+      verified_against: ">=0.40.0"
+    fix: >
+      client.messages.create(
+          model="claude-opus-4-6",
+          max_tokens=16000,
+          thinking={"type": "enabled", "budget_tokens": 10000},
+          messages=[{"role": "user", "content": "..."}]
+      )
+
+  - id: runlit-hallucination/anthropic-python/tool-use-wrong-result-type
+    languages: [python]
+    severity: ERROR
+    message: >
+      When returning a tool result, the content block type must be `"tool_result"`, not
+      `"tool_response"` or `"function_result"`. AI models hallucinate these wrong type strings.
+    patterns:
+      - pattern: {"type": "tool_response", ...}
+      - pattern: {"type": "function_result", ...}
+    metadata:
+      category: hallucination
+      library: anthropic-python
+      verified_against: ">=0.18.0"
+    fix: >
+      messages.append({
+          "role": "user",
+          "content": [{"type": "tool_result", "tool_use_id": tool_use_id, "content": result}]
+      })
+
+  - id: runlit-hallucination/anthropic-python/batch-wrong-method
+    languages: [python]
+    severity: ERROR
+    message: >
+      The Anthropic Message Batches API method is `client.messages.batches.create()`,
+      not `client.beta.messages.batches.create()`. The batch API is no longer in beta.
+      AI models hallucinate the `beta` prefix.
+    patterns:
+      - pattern: client.beta.messages.batches.create(...)
+      - pattern: client.beta.messages.batches.retrieve(...)
+      - pattern: client.beta.messages.batches.results(...)
+    metadata:
+      category: hallucination
+      library: anthropic-python
+      verified_against: ">=0.40.0"
+    fix: >
+      # Correct: no beta prefix
+      batch = client.messages.batches.create(requests=[...])
+      results = client.messages.batches.results(batch.id)
+
+  - id: runlit-hallucination/anthropic-python/vision-wrong-image-format
+    languages: [python]
+    severity: ERROR
+    message: >
+      When sending images to Claude, the `source` block must use `"type": "base64"` with
+      a `"media_type"` field, or `"type": "url"`. AI models often omit `media_type` or use
+      wrong field names like `"format"` or `"encoding"`.
+    patterns:
+      - pattern: {"type": "image", "source": {"type": "base64", "data": $D}}
+      - pattern: {"type": "image", "source": {"format": ..., "data": ..., ...}}
+    metadata:
+      category: hallucination
+      library: anthropic-python
+      verified_against: ">=0.18.0"
+    fix: >
+      {"type": "image", "source": {
+          "type": "base64",
+          "media_type": "image/jpeg",  # required: image/jpeg, image/png, image/gif, image/webp
+          "data": base64_data,
+      }}
+
+  - id: runlit-hallucination/anthropic-python/wrong-current-model-names
+    languages: [python]
+    severity: WARNING
+    message: >
+      Outdated Claude model identifier. As of March 2026, recommended models are
+      `claude-opus-4-6` and `claude-sonnet-4-6`. AI models produce outdated IDs.
+    patterns:
+      - pattern: model="claude-3-5-sonnet-latest"
+      - pattern: model="claude-3-7-sonnet-20250219"
+      - pattern: model="claude-3-7-sonnet-latest"
+      - pattern: model="claude-3-5-haiku-latest"
+    metadata:
+      category: deprecated
+      library: anthropic-python
+      verified_against: "March 2026"
+    fix: Use `model="claude-sonnet-4-6"` or `model="claude-opus-4-6"`.
+
+  # ── TypeScript / Node.js: additional patterns ────────────────────────────
+
+  - id: runlit-hallucination/anthropic-node/extended-thinking-wrong-format
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `thinking: true` or `thinking: { enabled: true }` is not the correct format.
+      Use `thinking: { type: "enabled", budgetTokens: N }`.
+    patterns:
+      - pattern: client.messages.create({ ..., thinking: true, ... })
+      - pattern: client.messages.create({ ..., thinking: { enabled: true }, ... })
+    metadata:
+      category: hallucination
+      library: "@anthropic-ai/sdk"
+      verified_against: ">=0.40.0"
+    fix: >
+      client.messages.create({
+        model: "claude-opus-4-6",
+        maxTokens: 16000,
+        thinking: { type: "enabled", budgetTokens: 10000 },
+        messages: [{ role: "user", content: "..." }],
+      })
+
+  - id: runlit-hallucination/anthropic-node/batch-beta-prefix
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `client.beta.messages.batches` — the batch API is no longer in beta.
+      Use `client.messages.batches` (no `beta` prefix).
+    patterns:
+      - pattern: client.beta.messages.batches.create(...)
+      - pattern: client.beta.messages.batches.retrieve(...)
+    metadata:
+      category: hallucination
+      library: "@anthropic-ai/sdk"
+      verified_against: ">=0.40.0"
+    fix: client.messages.batches.create({ requests: [...] })

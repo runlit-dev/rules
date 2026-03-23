@@ -1,0 +1,172 @@
+# runlit community rules — LlamaIndex hallucinations
+# License: Apache 2.0
+# LlamaIndex v0.10 (February 2024) completely restructured package imports.
+# LlamaIndex v0.11+ further split packages. AI models still produce v0.9 code.
+# Verified against LlamaIndex changelog (March 2026, llama-index-core>=0.10).
+
+rules:
+  # ── Python: old top-level import paths ──────────────────────────────────────
+
+  - id: runlit-hallucination/llamaindex/old-top-level-import
+    languages: [python]
+    severity: ERROR
+    message: >
+      `from llama_index import ...` raises ImportError in llama-index>=0.10.
+      All core classes moved to `llama_index.core`. This was the largest breaking
+      change in LlamaIndex history (February 2024).
+    patterns:
+      - pattern: from llama_index import VectorStoreIndex
+      - pattern: from llama_index import SimpleDirectoryReader
+      - pattern: from llama_index import StorageContext
+      - pattern: from llama_index import ServiceContext
+      - pattern: from llama_index import LLMPredictor
+      - pattern: from llama_index import PromptTemplate
+      - pattern: from llama_index import Document
+      - pattern: from llama_index import SummaryIndex
+    metadata:
+      category: hallucination
+      library: llama-index
+      breaking_version: "0.10.0"
+    fix: >
+      from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, Document
+      # pip install llama-index-core
+
+  - id: runlit-hallucination/llamaindex/gpt-simple-vector-index
+    languages: [python]
+    severity: ERROR
+    message: >
+      `GPTSimpleVectorIndex` does not exist. This is an AI hallucination of an old
+      internal class name. The correct class has always been `VectorStoreIndex`
+      (previously `GPTVectorStoreIndex` was used briefly, now `VectorStoreIndex`).
+    patterns:
+      - pattern: GPTSimpleVectorIndex(...)
+      - pattern: GPTSimpleVectorIndex.from_documents(...)
+      - pattern: from llama_index import GPTSimpleVectorIndex
+      - pattern: from llama_index.core import GPTSimpleVectorIndex
+    metadata:
+      category: hallucination
+      library: llama-index
+      verified_against: ">=0.10.0"
+    fix: >
+      from llama_index.core import VectorStoreIndex
+      index = VectorStoreIndex.from_documents(documents)
+
+  - id: runlit-hallucination/llamaindex/gpt-vector-store-index-old-name
+    languages: [python]
+    severity: WARNING
+    message: >
+      `GPTVectorStoreIndex` is the renamed legacy class. In llama-index>=0.10 use
+      `VectorStoreIndex` from `llama_index.core`.
+    patterns:
+      - pattern: GPTVectorStoreIndex(...)
+      - pattern: GPTVectorStoreIndex.from_documents(...)
+    metadata:
+      category: deprecated
+      library: llama-index
+      deprecated_version: "0.10.0"
+    fix: from llama_index.core import VectorStoreIndex
+
+  - id: runlit-hallucination/llamaindex/gpt-tree-index
+    languages: [python]
+    severity: ERROR
+    message: >
+      `GPTTreeIndex` is a hallucinated legacy class name.
+      Use `SummaryIndex` (from `llama_index.core`) for tree-based summarization.
+    patterns:
+      - pattern: GPTTreeIndex(...)
+      - pattern: from llama_index import GPTTreeIndex
+    metadata:
+      category: hallucination
+      library: llama-index
+      verified_against: ">=0.10.0"
+    fix: from llama_index.core import SummaryIndex
+
+  - id: runlit-hallucination/llamaindex/service-context-deprecated
+    languages: [python]
+    severity: WARNING
+    message: >
+      `ServiceContext.from_defaults(...)` is deprecated in llama-index>=0.10.
+      Use the global `Settings` object instead: `from llama_index.core import Settings`.
+    patterns:
+      - pattern: ServiceContext.from_defaults(...)
+      - pattern: from llama_index.core import ServiceContext
+      - pattern: from llama_index import ServiceContext
+    metadata:
+      category: deprecated
+      library: llama-index
+      deprecated_version: "0.10.0"
+    fix: >
+      from llama_index.core import Settings
+      from llama_index.llms.openai import OpenAI
+      Settings.llm = OpenAI(model="gpt-4o")
+      Settings.embed_model = "default"
+
+  - id: runlit-hallucination/llamaindex/old-llm-predictor
+    languages: [python]
+    severity: ERROR
+    message: >
+      `LLMPredictor` is removed in llama-index>=0.10. Configure the LLM directly
+      via `Settings.llm` or pass `llm=` to the query engine.
+    patterns:
+      - pattern: LLMPredictor(...)
+      - pattern: from llama_index import LLMPredictor
+      - pattern: from llama_index.core import LLMPredictor
+    metadata:
+      category: deprecated
+      library: llama-index
+      removed_version: "0.10.0"
+    fix: >
+      from llama_index.core import Settings
+      from llama_index.llms.openai import OpenAI
+      Settings.llm = OpenAI(model="gpt-4o", temperature=0)
+
+  - id: runlit-hallucination/llamaindex/query-returns-response-not-string
+    languages: [python]
+    severity: WARNING
+    message: >
+      `index.as_query_engine().query(...)` returns a `Response` object, not a string.
+      AI models often assign the result to a variable and use it as a string directly.
+      Access the text via `response.response` or `str(response)`.
+    patterns:
+      - pattern: print($QE.query(...))
+    metadata:
+      category: hallucination
+      library: llama-index
+      verified_against: ">=0.10.0"
+    fix: >
+      response = query_engine.query("What is the document about?")
+      print(response.response)  # access .response attribute
+
+  - id: runlit-hallucination/llamaindex/old-openai-llm-import
+    languages: [python]
+    severity: ERROR
+    message: >
+      `from llama_index.llms import OpenAI` raises ImportError in llama-index>=0.10.
+      LLM integrations moved to separate packages.
+    patterns:
+      - pattern: from llama_index.llms import OpenAI
+      - pattern: from llama_index.llms import Anthropic
+      - pattern: from llama_index.llms import Gemini
+    metadata:
+      category: hallucination
+      library: llama-index
+      breaking_version: "0.10.0"
+    fix: >
+      from llama_index.llms.openai import OpenAI        # pip install llama-index-llms-openai
+      from llama_index.llms.anthropic import Anthropic  # pip install llama-index-llms-anthropic
+
+  - id: runlit-hallucination/llamaindex/old-embeddings-import
+    languages: [python]
+    severity: ERROR
+    message: >
+      `from llama_index.embeddings import OpenAIEmbedding` raises ImportError in >=0.10.
+      Embedding integrations moved to `llama_index.embeddings.<provider>`.
+    patterns:
+      - pattern: from llama_index.embeddings import OpenAIEmbedding
+      - pattern: from llama_index.embeddings import HuggingFaceEmbedding
+    metadata:
+      category: hallucination
+      library: llama-index
+      breaking_version: "0.10.0"
+    fix: >
+      from llama_index.embeddings.openai import OpenAIEmbedding  # pip install llama-index-embeddings-openai

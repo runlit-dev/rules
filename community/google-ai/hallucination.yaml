@@ -1,0 +1,173 @@
+# runlit community rules — Google AI / Gemini SDK hallucinations
+# License: Apache 2.0
+# Covers both the legacy google-generativeai (v1) SDK and the new google-genai (v1+) SDK.
+# AI models trained before mid-2025 almost always produce the old SDK patterns.
+# Verified against google-genai changelog and migration guide (March 2026).
+
+rules:
+  # ── Python: old google-generativeai SDK patterns ────────────────────────────
+
+  - id: runlit-hallucination/google-ai-python/old-sdk-configure
+    languages: [python]
+    severity: ERROR
+    message: >
+      `genai.configure(api_key=...)` is the legacy google-generativeai v1 SDK pattern.
+      The current SDK is `google-genai` (v1+). Use `client = genai.Client(api_key=...)` instead.
+      AI models frequently generate the old SDK because training data predates the 2025 rewrite.
+    pattern: genai.configure(...)
+    metadata:
+      category: deprecated
+      library: google-generativeai
+      breaking_version: "1.0.0 (google-genai)"
+      verified_against: "March 2026"
+    fix: >
+      from google import genai
+      client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+      response = client.models.generate_content(model="gemini-2.0-flash", contents="...")
+
+  - id: runlit-hallucination/google-ai-python/old-generativemodel-class
+    languages: [python]
+    severity: ERROR
+    message: >
+      `genai.GenerativeModel(...)` is the legacy google-generativeai v1 API.
+      In the current google-genai SDK, use `client.models.generate_content(model=..., contents=...)`.
+    pattern: genai.GenerativeModel(...)
+    metadata:
+      category: deprecated
+      library: google-generativeai
+      breaking_version: "1.0.0 (google-genai)"
+    fix: >
+      client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+      response = client.models.generate_content(model="gemini-2.0-flash", contents="...")
+
+  - id: runlit-hallucination/google-ai-python/wrong-import-path
+    languages: [python]
+    severity: ERROR
+    message: >
+      `import google.generativeai as genai` is the legacy SDK import.
+      The current package is `google-genai`. Install with `pip install google-genai`.
+    patterns:
+      - pattern: import google.generativeai as genai
+      - pattern: import google.generativeai
+    metadata:
+      category: deprecated
+      library: google-generativeai
+      breaking_version: "1.0.0 (google-genai)"
+    fix: >
+      from google import genai
+      # pip install google-genai
+
+  - id: runlit-hallucination/google-ai-python/hallucinated-model-gemini-pro
+    languages: [python]
+    severity: WARNING
+    message: >
+      `"gemini-pro"` is a retired model ID. Use `"gemini-2.0-flash"` (fast/cheap)
+      or `"gemini-2.5-pro"` (most capable) as of March 2026.
+      AI models frequently produce outdated Gemini model identifiers.
+    patterns:
+      - pattern: model="gemini-pro"
+      - pattern: model="gemini-1.0-pro"
+      - pattern: model="gemini-1.5-pro"
+      - pattern: model="gemini-1.5-flash"
+      - pattern: model="gemini-ultra"
+    metadata:
+      category: deprecated
+      library: google-genai
+      verified_against: "March 2026"
+    fix: Use `model="gemini-2.0-flash"` or `model="gemini-2.5-pro"`.
+
+  - id: runlit-hallucination/google-ai-python/hallucinated-model-gemini-pro-vision
+    languages: [python]
+    severity: ERROR
+    message: >
+      `"gemini-pro-vision"` does not exist as a current API model ID.
+      Multimodal is supported by `gemini-2.0-flash` and `gemini-2.5-pro` natively.
+    patterns:
+      - pattern: model="gemini-pro-vision"
+      - pattern: model="gemini-1.0-pro-vision"
+      - pattern: model="gemini-1.5-pro-vision"
+    metadata:
+      category: hallucination
+      library: google-genai
+      verified_against: "March 2026"
+    fix: Use `model="gemini-2.0-flash"` — it handles text and images natively.
+
+  - id: runlit-hallucination/google-ai-python/old-start-chat
+    languages: [python]
+    severity: WARNING
+    message: >
+      `model.start_chat()` is the legacy google-generativeai SDK pattern.
+      In google-genai v1+, use `client.chats.create(model=...)`.
+    pattern: $MODEL.start_chat(...)
+    metadata:
+      category: deprecated
+      library: google-generativeai
+      breaking_version: "1.0.0 (google-genai)"
+    fix: >
+      chat = client.chats.create(model="gemini-2.0-flash")
+      response = chat.send_message("Hello")
+
+  - id: runlit-hallucination/google-ai-python/old-count-tokens
+    languages: [python]
+    severity: WARNING
+    message: >
+      `model.count_tokens(text)` is the legacy google-generativeai SDK pattern.
+      In google-genai v1+, use `client.models.count_tokens(model=..., contents=...)`.
+    pattern: $MODEL.count_tokens(...)
+    metadata:
+      category: deprecated
+      library: google-generativeai
+      breaking_version: "1.0.0 (google-genai)"
+    fix: response = client.models.count_tokens(model="gemini-2.0-flash", contents="...")
+
+  - id: runlit-hallucination/google-ai-python/old-embed-content
+    languages: [python]
+    severity: WARNING
+    message: >
+      `"embedding-001"` is a retired Google embedding model.
+      Use `"text-embedding-004"` or `"gemini-embedding-exp"` as of March 2026.
+    patterns:
+      - pattern: model="embedding-001"
+      - pattern: model_name="embedding-001"
+    metadata:
+      category: deprecated
+      library: google-generativeai
+      verified_against: "March 2026"
+    fix: Use `model="text-embedding-004"`.
+
+  # ── TypeScript / Node.js ────────────────────────────────────────────────────
+
+  - id: runlit-hallucination/google-ai-node/old-package-import
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `import { GoogleGenerativeAI } from "@google/generative-ai"` is the legacy v1 SDK.
+      The current package is `@google/genai` (v1+). Install with `npm install @google/genai`.
+    patterns:
+      - pattern: from "@google/generative-ai"
+      - pattern: from '@google/generative-ai'
+    metadata:
+      category: deprecated
+      library: "@google/generative-ai"
+      breaking_version: "1.0.0 (@google/genai)"
+      verified_against: "March 2026"
+    fix: >
+      import { GoogleGenAI } from "@google/genai";
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+  - id: runlit-hallucination/google-ai-node/old-getgenerativemodel
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >
+      `genAI.getGenerativeModel(...)` is the legacy @google/generative-ai API.
+      In @google/genai v1+, use `ai.models.generateContent(...)` directly.
+    pattern: $GENAI.getGenerativeModel(...)
+    metadata:
+      category: deprecated
+      library: "@google/generative-ai"
+      breaking_version: "1.0.0 (@google/genai)"
+    fix: >
+      const response = await ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: "...",
+      });
